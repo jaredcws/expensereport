@@ -1,0 +1,8 @@
+__pycache__/
+*.py[cod]
+*.db
+*.sqlite
+expense_report_app/data/receipts/*
+!expense_report_app/data/receipts/.gitkeep
+expense_report_app/data/generated_pdfs/*
+!expense_report_app/data/generated_pdfs/.gitkeep
