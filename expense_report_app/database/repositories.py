@@ -66,19 +66,24 @@ class ReportRepository:
             conn.executemany(
                 """
                 INSERT INTO mileage_items(
-                    report_id, item_date, project_number, destination,
-                    reimbursable_expense, number_of_miles, miles_reimbursement
-                ) VALUES (?, ?, ?, ?, ?, ?, ?)
+                    report_id, item_date, project_number, start_location, end_location,
+                    destination, reimbursable_expense, round_trip, number_of_miles,
+                    miles_reimbursement, google_maps_url
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 [
                     (
                         report_id,
                         item.get("date", ""),
                         item.get("project_number", ""),
+                        item.get("start_location", ""),
+                        item.get("end_location", ""),
                         item.get("destination", ""),
                         item.get("reimbursable_expense", ""),
+                        1 if item.get("round_trip", True) else 0,
                         item.get("number_of_miles", 0),
                         item.get("miles_reimbursement", 0),
+                        item.get("maps_url", ""),
                     )
                     for item in mileage_items
                 ],
@@ -124,10 +129,14 @@ class ReportRepository:
             {
                 "date": row["item_date"],
                 "project_number": row["project_number"],
+                "start_location": row["start_location"] or "",
+                "end_location": row["end_location"] or "",
                 "destination": row["destination"],
                 "reimbursable_expense": row["reimbursable_expense"],
+                "round_trip": bool(row["round_trip"]),
                 "number_of_miles": row["number_of_miles"],
                 "miles_reimbursement": row["miles_reimbursement"],
+                "maps_url": row["google_maps_url"] or "",
             }
             for row in mileage_rows
         ]

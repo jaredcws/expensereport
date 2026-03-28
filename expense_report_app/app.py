@@ -8,6 +8,7 @@ from PySide6.QtWidgets import QApplication
 from expense_report_app.database.db import Database
 from expense_report_app.database.schema import initialize_schema
 from expense_report_app.services.report_service import ReportService
+from expense_report_app.services.receipt_service import ReceiptService
 from expense_report_app.services.settings_service import SettingsService
 from expense_report_app.ui.main_window import MainWindow
 
@@ -27,8 +28,9 @@ def main() -> int:
 
     settings_service = SettingsService(db)
     report_service = ReportService(db)
+    receipt_service = ReceiptService(data_dir / "receipts")
 
-    window = MainWindow(report_service, settings_service)
+    window = MainWindow(report_service, settings_service, receipt_service)
     window.show()
 
     return app.exec()

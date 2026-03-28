@@ -23,10 +23,14 @@ CREATE TABLE IF NOT EXISTS mileage_items (
     report_id INTEGER NOT NULL,
     item_date TEXT,
     project_number TEXT,
+    start_location TEXT,
+    end_location TEXT,
     destination TEXT,
     reimbursable_expense TEXT,
+    round_trip INTEGER NOT NULL DEFAULT 1,
     number_of_miles REAL NOT NULL DEFAULT 0,
     miles_reimbursement REAL NOT NULL DEFAULT 0,
+    google_maps_url TEXT,
     FOREIGN KEY(report_id) REFERENCES reports(id) ON DELETE CASCADE
 );
 
@@ -65,9 +69,17 @@ CREATE TABLE IF NOT EXISTS app_settings (
 def initialize_schema(db: Database) -> None:
     with db.connect() as conn:
         conn.executescript(SCHEMA_SQL)
-        existing_columns = {
-            row["name"] for row in conn.execute("PRAGMA table_info(misc_items)").fetchall()
-        }
-        if "receipt_file_path" not in existing_columns:
-            conn.execute("ALTER TABLE misc_items ADD COLUMN receipt_file_path TEXT")
+        _ensure_column(conn, "misc_items", "receipt_file_path", "TEXT")
+        _ensure_column(conn, "mileage_items", "start_location", "TEXT")
+        _ensure_column(conn, "mileage_items", "end_location", "TEXT")
+        _ensure_column(conn, "mileage_items", "round_trip", "INTEGER NOT NULL DEFAULT 1")
+        _ensure_column(conn, "mileage_items", "google_maps_url", "TEXT")
         conn.commit()
+
+
+def _ensure_column(conn, table_name: str, column_name: str, definition: str) -> None:
+    existing_columns = {
+        row["name"] for row in conn.execute(f"PRAGMA table_info({table_name})").fetchall()
+    }
+    if column_name not in existing_columns:
+        conn.execute(f"ALTER TABLE {table_name} ADD COLUMN {column_name} {definition}")

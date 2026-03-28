@@ -1,5 +1,9 @@
 from __future__ import annotations
 
+from pathlib import Path
+
+from PySide6.QtCore import QUrl
+from PySide6.QtGui import QDesktopServices
 from PySide6.QtWidgets import (
     QHBoxLayout,
     QInputDialog,
@@ -11,23 +15,31 @@ from PySide6.QtWidgets import (
 )
 
 from expense_report_app.services.report_service import ReportService
+from expense_report_app.services.receipt_service import ReceiptService
 from expense_report_app.services.settings_service import SettingsService
+from expense_report_app.services.pdf_generator import PdfGenerator
 from expense_report_app.ui.report_form import ReportForm
 from expense_report_app.ui.settings_dialog import SettingsDialog
 from expense_report_app.utils.validators import is_number
 
 
 class MainWindow(QMainWindow):
-    def __init__(self, report_service: ReportService, settings_service: SettingsService) -> None:
+    def __init__(
+        self,
+        report_service: ReportService,
+        settings_service: SettingsService,
+        receipt_service: ReceiptService,
+    ) -> None:
         super().__init__()
         self.report_service = report_service
         self.settings_service = settings_service
+        self.pdf_generator = PdfGenerator()
         self.settings = self.settings_service.get_settings()
 
         self.setWindowTitle("Expense Report App")
         self.resize(1300, 800)
 
-        self.report_form = ReportForm()
+        self.report_form = ReportForm(receipt_service)
         self.report_form.apply_settings_defaults(self.settings)
 
         toolbar_layout = QHBoxLayout()
@@ -98,11 +110,28 @@ class MainWindow(QMainWindow):
                 return
             self.settings_service.update_settings(new_settings)
             self.settings = self.settings_service.get_settings()
+            self.report_form.update_integration_settings(self.settings)
             QMessageBox.information(self, "Settings", "Settings updated.")
 
     def on_generate_pdf(self) -> None:
+        data = self.report_form.collect_report_data()
+        if not data:
+            return
+
+        report_id = self.report_service.save_draft(data)
+        self.report_form.current_report_id = report_id
+        data["id"] = report_id
+
+        try:
+            output_dir = Path(self.settings.get("default_output_folder", "")).expanduser()
+            pdf_path = self.pdf_generator.generate_report_pdf(data, output_dir, self.settings)
+        except Exception as exc:
+            QMessageBox.warning(self, "Generate PDF", f"Could not generate the PDF.\n\n{exc}")
+            return
+
+        QDesktopServices.openUrl(QUrl.fromLocalFile(str(pdf_path)))
         QMessageBox.information(
             self,
             "Generate PDF",
-            "PDF generation is wired as a Phase 2 task. Button is intentionally scaffolded.",
+            f"PDF generated successfully.\n\n{pdf_path}",
         )

@@ -6,12 +6,22 @@ from PySide6.QtCore import QAbstractTableModel, QModelIndex, Qt
 
 
 class EditableTableModel(QAbstractTableModel):
-    def __init__(self, headers: list[str], rows: list[dict[str, Any]], keys: list[str], read_only: set[str] | None = None):
+    def __init__(
+        self,
+        headers: list[str],
+        rows: list[dict[str, Any]],
+        keys: list[str],
+        read_only: set[str] | None = None,
+        checkable: set[str] | None = None,
+        link_keys: set[str] | None = None,
+    ):
         super().__init__()
         self.headers = headers
         self.rows = rows
         self.keys = keys
         self.read_only = read_only or set()
+        self.checkable = checkable or set()
+        self.link_keys = link_keys or set()
 
     def rowCount(self, parent: QModelIndex = QModelIndex()) -> int:  # noqa: N802
         return len(self.rows)
@@ -24,8 +34,15 @@ class EditableTableModel(QAbstractTableModel):
             return None
         key = self.keys[index.column()]
         value = self.rows[index.row()].get(key, "")
-        if key == "receipt_enclosed" and role == Qt.CheckStateRole:
+        if key in self.checkable and role == Qt.CheckStateRole:
             return Qt.Checked if bool(value) else Qt.Unchecked
+        if key in self.checkable and role in (Qt.DisplayRole, Qt.EditRole):
+            return ""
+        if key in self.link_keys:
+            if role in (Qt.DisplayRole, Qt.EditRole):
+                return "Open Google Maps" if value else ""
+            if role == Qt.ToolTipRole:
+                return "" if value is None else str(value)
         if role in (Qt.DisplayRole, Qt.EditRole):
             if isinstance(value, bool):
                 return "Yes" if value else "No"
@@ -38,7 +55,7 @@ class EditableTableModel(QAbstractTableModel):
         key = self.keys[index.column()]
         if key in self.read_only:
             return False
-        if key == "receipt_enclosed" and role == Qt.CheckStateRole:
+        if key in self.checkable and role == Qt.CheckStateRole:
             self.rows[index.row()][key] = value == Qt.Checked
             self.dataChanged.emit(index, index, [Qt.CheckStateRole, Qt.DisplayRole])
             return True
@@ -46,7 +63,7 @@ class EditableTableModel(QAbstractTableModel):
             return False
         if isinstance(value, str):
             value = value.strip()
-        if key == "receipt_enclosed":
+        if key in self.checkable:
             value = str(value).lower() in {"yes", "true", "1", "y"}
         self.rows[index.row()][key] = value
         self.dataChanged.emit(index, index, [Qt.DisplayRole, Qt.EditRole])
@@ -57,8 +74,8 @@ class EditableTableModel(QAbstractTableModel):
             return Qt.ItemIsEnabled
         key = self.keys[index.column()]
         base_flags = Qt.ItemIsEnabled | Qt.ItemIsSelectable
-        if key == "receipt_enclosed":
-            return base_flags | Qt.ItemIsUserCheckable | Qt.ItemIsEditable
+        if key in self.checkable:
+            return base_flags | Qt.ItemIsUserCheckable
         if key in self.read_only:
             return base_flags
         return base_flags | Qt.ItemIsEditable
