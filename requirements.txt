@@ -1,0 +1,5 @@
+PySide6>=6.7
+Pillow>=10.0
+reportlab>=4.0
+PyMuPDF>=1.27
+rapidocr-onnxruntime>=1.2
