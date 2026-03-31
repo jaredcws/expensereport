@@ -27,8 +27,8 @@ def main() -> int:
     initialize_schema(db)
 
     settings_service = SettingsService(db)
-    report_service = ReportService(db)
     receipt_service = ReceiptService(data_dir / "receipts")
+    report_service = ReportService(db, receipt_service)
 
     window = MainWindow(report_service, settings_service, receipt_service)
     window.show()

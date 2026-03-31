@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from typing import Any
 from dataclasses import dataclass
 from datetime import datetime
 from decimal import Decimal, InvalidOperation
@@ -31,12 +32,12 @@ class ReceiptService:
         self.receipts_dir = receipts_dir
         self._ocr_engine: RapidOCR | None = None
 
-    def attach_receipt(self, source_path: Path) -> ParsedReceipt:
+    def attach_receipt(self, source_path: Path, report_id: int | None = None) -> ParsedReceipt:
         if not source_path.exists():
             raise FileNotFoundError(f"Receipt not found: {source_path}")
 
         self.receipts_dir.mkdir(parents=True, exist_ok=True)
-        stored_path = self._copy_receipt(source_path)
+        stored_path = self._copy_receipt(source_path, report_id=report_id)
 
         try:
             raw_text = self._extract_text(stored_path)
@@ -58,15 +59,71 @@ class ReceiptService:
             raw_text=raw_text,
         )
 
-    def _copy_receipt(self, source_path: Path) -> Path:
+    def organize_report_receipts(self, report_id: int, misc_items: list[dict[str, Any]]) -> bool:
+        report_receipts_dir = self._report_receipts_dir(report_id)
+        report_receipts_dir.mkdir(parents=True, exist_ok=True)
+        updated = False
+
+        for item in misc_items:
+            receipt_path_value = str(item.get("receipt_file", "")).strip()
+            if not receipt_path_value:
+                continue
+
+            current_path = Path(receipt_path_value)
+            if not current_path.exists():
+                continue
+
+            target_path = self._move_receipt_to_report_dir(current_path, report_receipts_dir)
+            if target_path != current_path:
+                item["receipt_file"] = str(target_path)
+                updated = True
+        return updated
+
+    def _copy_receipt(self, source_path: Path, report_id: int | None = None) -> Path:
         timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
-        target = self.receipts_dir / f"{source_path.stem}_{timestamp}{source_path.suffix.lower()}"
-        counter = 1
-        while target.exists():
-            target = self.receipts_dir / f"{source_path.stem}_{timestamp}_{counter}{source_path.suffix.lower()}"
-            counter += 1
+        destination_dir = self._report_receipts_dir(report_id) if report_id is not None else self.receipts_dir
+        destination_dir.mkdir(parents=True, exist_ok=True)
+        target_name = f"{source_path.stem}_{timestamp}{source_path.suffix.lower()}"
+        target = self._unique_target_path(destination_dir, target_name)
         shutil.copy2(source_path, target)
         return target
+
+    def _report_receipts_dir(self, report_id: int | None) -> Path:
+        if report_id is None:
+            return self.receipts_dir
+        return self.receipts_dir / f"expense_report_{report_id}"
+
+    def _move_receipt_to_report_dir(self, source_path: Path, destination_dir: Path) -> Path:
+        if source_path.parent.resolve() == destination_dir.resolve():
+            return source_path
+
+        target_path = self._unique_target_path(destination_dir, source_path.name)
+        shutil.move(str(source_path), str(target_path))
+        self._cleanup_empty_receipt_dirs(source_path.parent)
+        return target_path
+
+    def _unique_target_path(self, directory: Path, file_name: str) -> Path:
+        candidate = directory / file_name
+        if not candidate.exists():
+            return candidate
+
+        stem = Path(file_name).stem
+        suffix = Path(file_name).suffix
+        counter = 1
+        while True:
+            candidate = directory / f"{stem}_{counter}{suffix}"
+            if not candidate.exists():
+                return candidate
+            counter += 1
+
+    def _cleanup_empty_receipt_dirs(self, directory: Path) -> None:
+        current = directory
+        receipts_root = self.receipts_dir.resolve()
+        while current.resolve() != receipts_root:
+            if any(current.iterdir()):
+                return
+            current.rmdir()
+            current = current.parent
 
     def _extract_text(self, source_path: Path) -> str:
         if source_path.suffix.lower() == ".pdf":

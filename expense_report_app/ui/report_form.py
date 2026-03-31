@@ -295,11 +295,7 @@ class ReportForm(QWidget):
         self.recalculate_totals()
 
     def attach_receipt_and_autofill(self) -> None:
-        row_index = self.misc_table.currentIndex().row()
-        if row_index < 0:
-            self.add_misc_row()
-            row_index = len(self.misc_model.rows) - 1
-            self.misc_table.selectRow(row_index)
+        row_index = self.resolve_misc_receipt_target_row()
         file_path, _ = QFileDialog.getOpenFileName(
             self,
             "Attach Receipt",
@@ -310,7 +306,10 @@ class ReportForm(QWidget):
             return
 
         try:
-            parsed_receipt = self.receipt_service.attach_receipt(Path(file_path))
+            parsed_receipt = self.receipt_service.attach_receipt(
+                Path(file_path),
+                report_id=self.current_report_id,
+            )
         except Exception as exc:
             QMessageBox.warning(self, "Attach Receipt", f"Could not process the selected receipt.\n\n{exc}")
             return
@@ -349,6 +348,26 @@ class ReportForm(QWidget):
                 "Receipt Attached",
                 "Receipt attached. I could not confidently extract details from this file, so the row is ready for manual edits.",
             )
+
+    def resolve_misc_receipt_target_row(self) -> int:
+        current_row_index = self.misc_table.currentIndex().row()
+        if current_row_index >= 0 and current_row_index < len(self.misc_model.rows):
+            current_row = self.misc_model.rows[current_row_index]
+            if not self.misc_row_has_attached_receipt(current_row):
+                return current_row_index
+
+        for row_index, row in enumerate(self.misc_model.rows):
+            if not self.misc_row_has_attached_receipt(row):
+                self.misc_table.selectRow(row_index)
+                return row_index
+
+        self.add_misc_row()
+        row_index = len(self.misc_model.rows) - 1
+        self.misc_table.selectRow(row_index)
+        return row_index
+
+    def misc_row_has_attached_receipt(self, row: dict[str, Any]) -> bool:
+        return bool(str(row.get("receipt_file", "")).strip())
 
     def on_mileage_model_changed(self, top_left: Any, bottom_right: Any, _roles: Any) -> None:
         if top_left.isValid() and bottom_right.isValid():
